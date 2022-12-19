@@ -1,0 +1,173 @@
+<html>
+  <head>
+    <title>Share-Whiteboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+  </head>
+
+  <style>
+    #chat {
+      text-align: left;
+      background: #f1f1f1;
+      width: 500px;
+      min-height: 300px;
+      padding: 20px;
+    }
+  </style>
+
+  <body>
+    <center>
+      <canvas id="canvas" width="700" height="500"></canvas>
+
+      <div>
+        <input type="button" onclick="change(1)" id="text" value="1">
+        <input type="button" onclick="change(2)" id="text" value="2">
+
+        <label>色<input id="color" type="color"></label>
+        <label>太さ<input id="width" type="number" min="1" max="30"></label>
+        <span id="pencil" class="active" onClick="tool(1)">
+          <i class="bi bi-pencil"></i>
+        </span>
+        <span id="eraser" onClick="tool(2)">
+          <i class="bi bi-eraser"></i>
+        </span>
+      </div>
+    </center>
+
+    <script>
+      var url = 'ws://' + window.location.host + '/ws';
+      var storeUrl = 'http://' + window.location.host + '/store'
+      var restoreUrl = 'http://' + window.location.host + '/restore'
+      var ws = new WebSocket(url);
+
+
+      var w = document.getElementById('width').value;
+      var canvas = document.getElementById('canvas');
+      var ctx = canvas.getContext('2d');
+
+      ws.onmessage = function (msg) {
+        var msgArray = String(msg.data).split(':')
+        if (msgArray[0] == 'draw') {
+          draw(w, msgArray[1], msgArray[2], msgArray[3], msgArray[4], msgArray[5])
+        }
+      };
+
+      ws.onopen = function (e) {
+        change(1)
+        restore()
+      }
+
+      function change (session) {
+        ws.send('change:' + session)
+        ws.send('restore:')
+      }
+
+      // canvas 
+
+      var drawing = false;
+      // 前回の座標を記録する（初期値：０）
+      var before_x = 0;
+      var before_y = 0;
+      
+      
+      canvas.addEventListener('mousemove', draw_canvas);
+      // マウスをクリックしてる時
+      canvas.addEventListener('mousedown', function(e) {
+        drawing = true;
+        var rect = e.target.getBoundingClientRect();
+        before_x = e.clientX - rect.left;
+        before_y = e.clientY - rect.top;
+      });
+      // マウスをクリックしてない時
+      canvas.addEventListener('mouseup', function() {
+        drawing = false;
+        sendJSON()
+      });
+      
+      // 描画の処理
+      async function draw_canvas(e) {
+        // drawingがtrueじゃなかったら返す
+        if (!drawing){
+          return
+        };
+        var rect = e.target.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        var y = e.clientY - rect.top;
+        var w = document.getElementById('width').value;
+        var color = document.getElementById('color').value;
+        var r = parseInt(color.substring(1,3), 16);
+        var g = parseInt(color.substring(3,5), 16);
+        var b = parseInt(color.substring(5,7), 16);
+
+        draw(w, before_x, before_y, x, y, r + ',' + g + ',' + b)
+
+        // send
+        ws.send('draw:' + before_x + ':' + before_y + ':' + x + ':' + y + ':' + r + ',' + g + ',' + b)
+
+        // 描画最後の座標を前回の座標に代入する
+        before_x = x;
+        before_y = y;
+      }
+
+      function sendJSON() {
+        var fd = new FormData()
+        canvas.toBlob(function (blob) {
+          fd.append('image_file', blob, 'blob')
+          fetch(storeUrl, {
+            method: 'POST',
+            body: fd
+          })
+        }, 'image/png')
+      }
+
+      function restore() {
+        var png = new Image()
+        png.src = restoreUrl
+        png.onload = () => {
+          ctx.drawImage(png, 0, 0)
+        }
+      }
+
+      function draw(w, x, y, dx, dy, rgb) {
+        // 描画
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgb('+ rgb + ')';
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(dx, dy);
+        ctx.stroke();
+        ctx.closePath();
+      }
+      
+      // クリアボタンクリック時
+      // クリアボタンクリックした時にアラートを表示
+      function delete_canvas(){
+        ret = confirm('canvasの内容を削除します。');
+        // アラートで「OK」を選んだ時
+        if (ret == true){
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+      
+      var pen = document.getElementById('pencil');
+      var era = document.getElementById('eraser');
+      // 鉛筆と消しゴムの切り替え
+      
+      function tool(btnNum){
+        // クリックされボタンが鉛筆だったら
+        if (btnNum == 1){
+          ctx.globalCompositeOperation = 'source-over';
+          pen.className = 'active';
+          era.className = '';
+        }
+        // クリックされボタンが消しゴムだったら
+        else if (btnNum == 2){
+          ctx.globalCompositeOperation = 'destination-out';
+          pen.className = '';
+          era.className = 'active';
+        }
+      }
+ 
+    </script>
+  </body>
+</html>
