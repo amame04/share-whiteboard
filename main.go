@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 )
 
 func main() {
+  const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
   r := gin.Default()
 
   canvasCtx := make(map[string][]byte)
@@ -19,7 +21,33 @@ func main() {
 
   //routing
   r.GET("/", func(c *gin.Context) {
-    http.ServeFile(c.Writer, c.Request, "index.html")
+    newFlag := c.Query("new")
+    if(newFlag == "true") {
+      digit := rand.Intn(4)+3
+      b := make([]byte, int(digit))
+      rand.Read(b)
+
+      var result string
+      f := true
+      for f {
+        for _, v := range b {
+          result += string(letters[int(v)%len(letters)])
+        }
+        if _, ok := canvasCtx[result]; !ok {
+          f = false
+        }
+      }
+      canvasCtx[result] = []byte{0}
+      c.Redirect(http.StatusSeeOther, "/?session=" + result)
+      return
+    }
+
+    session := c.Query("session")
+    if _, ok := canvasCtx[session]; ok && session != "" {
+      http.ServeFile(c.Writer, c.Request, "index.html")
+    } else {
+      http.ServeFile(c.Writer, c.Request, "enter.html")
+    }
   })
 
   r.POST("/store", func(c *gin.Context) {
@@ -27,11 +55,11 @@ func main() {
     png, _ := img.Open()
     defer png.Close()
 
-    canvasCtx["1"], _ = ioutil.ReadAll(png)
+    canvasCtx[c.Query("session")], _ = ioutil.ReadAll(png)
   })
 
   r.GET("/restore", func(c *gin.Context) {
-    c.Data(http.StatusOK, "image/png", canvasCtx["1"])
+    c.Data(http.StatusOK, "image/png", canvasCtx[c.Query("session")])
   })
 
   r.GET("/ws", func(c *gin.Context) {
@@ -49,7 +77,14 @@ func main() {
       m.BroadcastFilter(msg, func (ss *melody.Session) bool {
         s1, _ := s.Get("session")
         s2, _ := ss.Get("session")
-        return s1 == s2
+        return s1 == s2 && s != ss
+      })
+
+    case "store":
+      m.BroadcastFilter([]byte("restore:"), func (ss *melody.Session) bool {
+        s1, _ := s.Get("session")
+        s2, _ := ss.Get("session")
+        return s1 == s2 && s != ss
       })
 
     }
