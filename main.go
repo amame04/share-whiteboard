@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/olahol/melody"
@@ -23,6 +24,7 @@ func main() {
   r.GET("/", func(c *gin.Context) {
     newFlag := c.Query("new")
     if(newFlag == "true") {
+      rand.Seed(time.Now().UnixNano())
       digit := rand.Intn(4)+3
       b := make([]byte, int(digit))
       rand.Read(b)
