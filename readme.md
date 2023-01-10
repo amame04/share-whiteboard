@@ -1,2 +1,2 @@
 # share-whiteboard
-Web application that is shareing whiteboard.
+Web application that is sharing whiteboard.
